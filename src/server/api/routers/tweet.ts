@@ -58,6 +58,11 @@ export const tweetRouter = createTRPCRouter({
               image: true,
             },
           },
+          _count: {
+            select: {
+              likes: true,
+            },
+          },
         },
       });
 
