@@ -5,11 +5,8 @@ import { CreateTweet } from "./CreateTweet";
 
 import { useEffect, useState } from "react";
 import { AiFillHeart } from "react-icons/ai";
-import {
-  InfiniteData,
-  QueryClient,
-  useQueryClient,
-} from "@tanstack/react-query";
+import type { QueryClient, InfiniteData } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
 import Link from "next/link";
 import dayjs from "dayjs";
@@ -62,11 +59,91 @@ const useScrollPosition = () => {
   return scrollPosition;
 };
 
+function updateCache({
+  client,
+  variables,
+  data,
+  action,
+}: {
+  client: QueryClient;
+  variables: {
+    tweetId: string;
+  };
+  data: {
+    userId: string;
+  };
+  action: "like" | "unlike";
+}) {
+  client.setQueryData(
+    [
+      ["tweet", "timeline"],
+      {
+        input: {
+          limit: 10,
+        },
+        type: "infinite",
+      },
+    ],
+    (oldData) => {
+      const newData = oldData as InfiniteData<
+        RouterOutputs["tweet"]["timeline"]
+      >;
+      const value = action === "like" ? 1 : -1;
+      const newTweets = newData.pages.map((page) => {
+        return {
+          tweets: page.tweets.map((tweet) => {
+            if (tweet.id === variables.tweetId) {
+              return {
+                ...tweet,
+                likes: action === "like" ? [data.userId] : [],
+                _count: {
+                  likes: tweet._count.likes + value,
+                },
+              };
+            }
+
+            return tweet;
+          }),
+        };
+      });
+
+      return {
+        ...newData,
+        pages: newTweets,
+      };
+    }
+  );
+}
+
 type TweetProps = {
   tweet: RouterOutputs["tweet"]["timeline"]["tweets"][number];
+  client: QueryClient;
 };
 
-const Tweet = ({ tweet }: TweetProps) => {
+const Tweet = ({ tweet, client }: TweetProps) => {
+  const likeMutation = api.tweet.like.useMutation({
+    onSuccess: (data, variables) => {
+      updateCache({
+        client,
+        data,
+        variables,
+        action: "like",
+      });
+    },
+  }).mutateAsync;
+  const unlikeMutation = api.tweet.like.useMutation({
+    onSuccess: (data, variables) => {
+      updateCache({
+        client,
+        data,
+        variables,
+        action: "unlike",
+      });
+    },
+  }).mutateAsync;
+
+  const hasLiked = tweet.likes.length > 0;
+
   return (
     <div className="mb-4 border-b-2 border-gray-500">
       <div className="flex p-2">
@@ -89,8 +166,27 @@ const Tweet = ({ tweet }: TweetProps) => {
             </p>
           </div>
 
-          <div className=" ">{tweet.text}</div>
+          <div>{tweet.text}</div>
         </div>
+      </div>
+
+      <div className="mt-4 flex items-center p-2 ">
+        <AiFillHeart
+          color={hasLiked ? "red" : "gray"}
+          size="1.5rem"
+          onClick={() => {
+            if (hasLiked) {
+              unlikeMutation({
+                tweetId: tweet.id,
+              });
+              return;
+            }
+            likeMutation({
+              tweetId: tweet.id,
+            });
+          }}
+        />
+        <span className="text-ms text-gray-500">{tweet._count.likes}</span>
       </div>
     </div>
   );
@@ -107,6 +203,8 @@ export const Timeline = () => {
       }
     );
 
+  const client = useQueryClient();
+
   const tweets = data?.pages.flatMap((page) => page.tweets) ?? [];
 
   useEffect(() => {
@@ -121,7 +219,7 @@ export const Timeline = () => {
 
       <div className="border-l-2 border-r-2 border-t-2 border-gray-500">
         {tweets.map((tweet) => (
-          <Tweet key={tweet.id} tweet={tweet} />
+          <Tweet key={tweet.id} tweet={tweet} client={client} />
         ))}
 
         {!hasNextPage && <p>No more items to load</p>}

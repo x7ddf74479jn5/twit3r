@@ -14,8 +14,14 @@ export const tweetSchema = z.object({
 export const CreateTweet = () => {
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const utils = api.useContext();
 
-  const { mutateAsync } = api.tweet.create.useMutation();
+  const { mutateAsync } = api.tweet.create.useMutation({
+    onSuccess: () => {
+      setText("");
+      utils.tweet.timeline.invalidate();
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +56,7 @@ export const CreateTweet = () => {
         ></textarea>
         <div className="mt-4 flex justify-end">
           <button
-            className="bg-primary rounded-md px-4 py-2 text-white"
+            className="rounded-md bg-primary px-4 py-2 text-white"
             type="submit"
           >
             Tweet
