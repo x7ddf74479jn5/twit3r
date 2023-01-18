@@ -1,5 +1,5 @@
 import Image from "next/image";
-import type { RouterOutputs } from "../utils/api";
+import type { RouterInputs, RouterOutputs } from "../utils/api";
 import { api } from "../utils/api";
 import { CreateTweet } from "./CreateTweet";
 
@@ -34,6 +34,8 @@ dayjs.updateLocale("en", {
   },
 });
 
+const LIMIT = 10;
+
 const useScrollPosition = () => {
   const [scrollPosition, setScrollPosition] = useState(0);
 
@@ -59,12 +61,7 @@ const useScrollPosition = () => {
   return scrollPosition;
 };
 
-function updateCache({
-  client,
-  variables,
-  data,
-  action,
-}: {
+type UpdateCacheParams = {
   client: QueryClient;
   variables: {
     tweetId: string;
@@ -73,14 +70,21 @@ function updateCache({
     userId: string;
   };
   action: "like" | "unlike";
-}) {
+  input: RouterInputs["tweet"]["timeline"];
+};
+
+function updateCache({
+  client,
+  variables,
+  data,
+  action,
+  input,
+}: UpdateCacheParams) {
   client.setQueryData(
     [
       ["tweet", "timeline"],
       {
-        input: {
-          limit: 10,
-        },
+        input,
         type: "infinite",
       },
     ],
@@ -116,17 +120,19 @@ function updateCache({
 }
 
 type TweetProps = {
-  tweet: RouterOutputs["tweet"]["timeline"]["tweets"][number];
   client: QueryClient;
+  tweet: RouterOutputs["tweet"]["timeline"]["tweets"][number];
+  input: RouterInputs["tweet"]["timeline"];
 };
 
-const Tweet = ({ tweet, client }: TweetProps) => {
+const Tweet = ({ tweet, client, input }: TweetProps) => {
   const likeMutation = api.tweet.like.useMutation({
     onSuccess: (data, variables) => {
       updateCache({
         client,
         data,
         variables,
+        input,
         action: "like",
       });
     },
@@ -137,6 +143,7 @@ const Tweet = ({ tweet, client }: TweetProps) => {
         client,
         data,
         variables,
+        input,
         action: "unlike",
       });
     },
@@ -159,7 +166,9 @@ const Tweet = ({ tweet, client }: TweetProps) => {
 
         <div className="ml-2">
           <div className="flex items-center">
-            <p className="font-bold">{tweet.author.name}</p>
+            <Link href={`/${tweet.author.name}`}>
+              <p className="font-bold">{tweet.author.name}</p>
+            </Link>
             <p className="text-sm text-gray-400">
               {" "}
               - {dayjs(tweet.createdAt).fromNow()}
@@ -192,12 +201,16 @@ const Tweet = ({ tweet, client }: TweetProps) => {
   );
 };
 
-export const Timeline = () => {
+type TimelineProps = {
+  where: RouterInputs["tweet"]["timeline"]["where"];
+};
+
+export const Timeline = ({ where = {} }: TimelineProps) => {
   const scrollPosition = useScrollPosition();
 
   const { data, hasNextPage, fetchNextPage, isFetching } =
     api.tweet.timeline.useInfiniteQuery(
-      { limit: 10 },
+      { limit: LIMIT, where },
       {
         getNextPageParam: (lastPage) => lastPage.nextCursor,
       }
@@ -219,7 +232,15 @@ export const Timeline = () => {
 
       <div className="border-l-2 border-r-2 border-t-2 border-gray-500">
         {tweets.map((tweet) => (
-          <Tweet key={tweet.id} tweet={tweet} client={client} />
+          <Tweet
+            key={tweet.id}
+            tweet={tweet}
+            client={client}
+            input={{
+              where,
+              limit: LIMIT,
+            }}
+          />
         ))}
 
         {!hasNextPage && <p>No more items to load</p>}
