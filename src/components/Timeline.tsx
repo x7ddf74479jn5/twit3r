@@ -202,7 +202,7 @@ const Tweet = ({ tweet, client, input }: TweetProps) => {
 };
 
 type TimelineProps = {
-  where: RouterInputs["tweet"]["timeline"]["where"];
+  where?: RouterInputs["tweet"]["timeline"]["where"];
 };
 
 export const Timeline = ({ where = {} }: TimelineProps) => {
